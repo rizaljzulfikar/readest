@@ -2753,5 +2753,8 @@
   "Books uploaded": "已上传书籍",
   "Reset Counts": "重置计数",
   "Reset the counts and sync history on this device?": "要重置此设备上的计数和同步记录吗？",
-  "Folder not available": "文件夹不可用"
+  "Folder not available": "文件夹不可用",
+  "Translate Sentences": "翻译句子",
+  "Hide Sentence Translation": "隐藏句子翻译",
+  "Sentence Translation": "句子翻译"
 }

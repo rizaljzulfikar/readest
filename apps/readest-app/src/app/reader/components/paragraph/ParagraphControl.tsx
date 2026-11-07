@@ -3,9 +3,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FoliateView } from '@/types/view';
 import { Insets } from '@/types/misc';
+import { useEnv } from '@/context/EnvContext';
 import { useReaderStore } from '@/store/readerStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { eventDispatcher } from '@/utils/event';
+import { saveViewSettings } from '@/helpers/settings';
+import { DEFAULT_PARAGRAPH_MODE_CONFIG } from '@/services/constants';
 import {
   loadParagraphFontScaleIndex,
   PARAGRAPH_FONT_SCALE_OPTIONS,
@@ -23,7 +26,8 @@ interface ParagraphControlProps {
 
 const ParagraphControl: React.FC<ParagraphControlProps> = ({ bookKey, viewRef, gridInsets }) => {
   const _ = useTranslation();
-  const { getViewSettings } = useReaderStore();
+  const { envConfig } = useEnv();
+  const { getViewSettings, setViewSettings } = useReaderStore();
   const viewSettings = getViewSettings(bookKey);
 
   const {
@@ -37,6 +41,25 @@ const ParagraphControl: React.FC<ParagraphControlProps> = ({ bookKey, viewRef, g
     toggleTtsAudio,
     reengageTtsFollow,
   } = useParagraphMode({ bookKey, viewRef });
+
+  // Sentence-by-sentence translation toggle, persisted per book like the mode
+  // itself. Turning it on really turns the book page's paragraph translation
+  // off (the main toggle): sentence translation replaces it, so both can never
+  // run at once. Turning it back off leaves the main toggle as it is — the
+  // user re-enables it in Settings when they want paragraph translations.
+  const toggleSentenceTranslation = useCallback(() => {
+    const settings = getViewSettings(bookKey);
+    if (!settings) return;
+    const config = settings.paragraphMode ?? DEFAULT_PARAGRAPH_MODE_CONFIG;
+    const newConfig = { ...config, translationEnabled: !config.translationEnabled };
+    const nextSettings = { ...settings, paragraphMode: newConfig };
+    if (newConfig.translationEnabled) {
+      nextSettings.translationEnabled = false;
+      saveViewSettings(envConfig, bookKey, 'translationEnabled', false, true, false);
+    }
+    setViewSettings(bookKey, nextSettings);
+    saveViewSettings(envConfig, bookKey, 'paragraphMode', newConfig, true, false);
+  }, [bookKey, getViewSettings, setViewSettings, envConfig]);
 
   // Device-level display scale for the paragraph text (#5246), persisted like
   // the RSVP overlay's display settings.
@@ -88,6 +111,8 @@ const ParagraphControl: React.FC<ParagraphControlProps> = ({ bookKey, viewRef, g
         onClose={toggleParagraphMode}
         ttsActive={ttsActive}
         onToggleTtsAudio={toggleTtsAudio}
+        translationEnabled={viewSettings?.paragraphMode?.translationEnabled ?? false}
+        onToggleTranslation={toggleSentenceTranslation}
         fontScaleIndex={fontScaleIndex}
         onFontScaleIndexChange={handleFontScaleIndexChange}
         viewSettings={viewSettings ?? undefined}

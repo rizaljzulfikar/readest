@@ -506,4 +506,54 @@ describe('useTextTranslation', () => {
     readerState.getViewSettings = getViewSettings;
     vi.unstubAllGlobals();
   });
+
+  // Paragraph Mode's sentence translation overrides the book page's paragraph
+  // translation: while it is active nothing is fetched, and disabling it hands
+  // translation back to the main toggle.
+  it('stays disabled while paragraph mode sentence translation is active', async () => {
+    const getViewSettings = readerState.getViewSettings;
+    let settings = {
+      ...viewSettings,
+      paragraphMode: { enabled: true, translationEnabled: true },
+    };
+    readerState.getViewSettings = () => settings;
+    let onIntersect: IntersectionObserverCallback = () => {};
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(callback: IntersectionObserverCallback) {
+          onIntersect = callback;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    const view = document.createElement('div');
+    view.innerHTML = '<p>Source paragraph.</p>';
+    const paragraph = view.querySelector('p')!;
+    document.body.appendChild(view);
+
+    const { rerender } = renderHook(() => useTextTranslation('book-1', view));
+    const intersect = () =>
+      onIntersect(
+        [{ isIntersecting: true, target: paragraph } as unknown as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+
+    // The translate mock is file-global; measure deltas within this test.
+    const before = translate.mock.calls.length;
+    intersect();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(translate.mock.calls.length).toBe(before);
+
+    // Sentence translation off: the main toggle takes over again.
+    settings = { ...viewSettings, paragraphMode: { enabled: true, translationEnabled: false } };
+    rerender();
+    intersect();
+    await waitFor(() => expect(translate.mock.calls.length).toBeGreaterThan(before));
+
+    view.remove();
+    readerState.getViewSettings = getViewSettings;
+    vi.unstubAllGlobals();
+  });
 });

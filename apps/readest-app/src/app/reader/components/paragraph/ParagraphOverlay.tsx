@@ -32,6 +32,7 @@ import {
   getSelectionRangeWithin,
   mapCloneSelectionToSource,
 } from './paragraphSelection';
+import { useParagraphSentenceTranslation } from '@/app/reader/hooks/useParagraphSentenceTranslation';
 
 // CSS Custom Highlight registry name for the in-paragraph TTS word/sentence
 // highlight (#3235). Unique per app so it never collides with other highlights.
@@ -179,6 +180,7 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
   const booknotes = useBookDataStore(
     (state) => state.booksData[bookKey.split('-')[0]!]?.config?.booknotes,
   );
+  const bookMeta = useBookDataStore((state) => state.booksData[bookKey.split('-')[0]!]?.book);
   const { settings } = useSettingsStore();
   const [paragraphs, setParagraphs] = useState<ParagraphContent[]>([]);
   const [isVisible, setIsVisible] = useState(false);
@@ -198,6 +200,9 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
   const paragraphIdCounter = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  // The paragraph frame: it scrolls when sentence translations make the
+  // content taller than the viewport-derived height cap.
+  const frameRef = useRef<HTMLDivElement>(null);
   const lastScrollTime = useRef(0);
   const onCloseRef = useRef(onClose);
   // The focused paragraph's live range in the book document, so a selection
@@ -265,7 +270,7 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
         : undefined,
       maxBlockSize: layoutContext.vertical
         ? 'min(calc(100vw - 1.5rem), 28rem)'
-        : `min(calc(100dvh - ${topInset + bottomInset + 132}px), 38rem)`,
+        : `calc(100dvh - ${topInset + bottomInset + 132}px)`,
       marginInline: 'auto',
     } as React.CSSProperties;
   }, [appService?.hasSafeAreaInset, gridInsets.bottom, gridInsets.top, layoutContext.vertical]);
@@ -527,6 +532,21 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
     if (!isVisible) return;
 
     const handleWheel = (e: WheelEvent) => {
+      // Sentence translations can make the paragraph taller than the frame, so
+      // a wheel over the paragraph content scrolls it first and turns the
+      // paragraph only at its scroll edges. Anywhere else over the overlay the
+      // wheel turns directly.
+      const frame = frameRef.current;
+      const overFrame = !!frame && e.target instanceof Node && frame.contains(e.target);
+      if (overFrame) {
+        const canScrollDown = frame.scrollTop + frame.clientHeight < frame.scrollHeight - 1;
+        const canScrollUp = frame.scrollTop > 1;
+        if ((e.deltaY > 0 && canScrollDown) || (e.deltaY < 0 && canScrollUp)) {
+          e.stopPropagation();
+          return;
+        }
+      }
+
       e.preventDefault();
       e.stopPropagation();
 
@@ -700,6 +720,46 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
     );
     return clear;
   }, [paragraphs, booknotes, bookKey, getCloneRoot, getView, settings]);
+
+  // Sentence-by-sentence translation of the focused paragraph. Translations are
+  // inserted into the clone after each sentence; the clone baseline (and with
+  // it selection mapping, highlights and TTS ranges) is untouched because the
+  // insertions are cfi-inert.
+  const sentenceTranslationEnabled = viewSettings?.paragraphMode?.translationEnabled ?? false;
+  useParagraphSentenceTranslation({
+    getCloneRoot,
+    paragraphKey: activeParagraph?.id ?? -1,
+    enabled: sentenceTranslationEnabled,
+    viewSettings,
+    bookTitle: bookMeta?.title,
+    bookAuthor: bookMeta?.author,
+  });
+
+  // CSS for the inserted sentence translations, following the user's global
+  // translated-text settings; without a configured color the translation is a
+  // muted shade of the paragraph text (theme- and e-ink-safe).
+  const translationCss = useMemo(() => {
+    const { translationFont, translationFontStyle, translationFontSize, translationColor } =
+      viewSettings ?? {};
+    return [
+      translationFont ? `font-family: var(--${translationFont});` : '',
+      translationFontStyle?.includes('italic') ? 'font-style: italic;' : '',
+      translationFontStyle?.includes('bold') ? 'font-weight: bold;' : '',
+      translationFontSize && translationFontSize !== 1
+        ? `font-size: ${translationFontSize}em;`
+        : '',
+      translationColor
+        ? `color: ${translationColor};`
+        : 'color: color-mix(in srgb, currentColor 72%, transparent);',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }, [
+    viewSettings?.translationFont,
+    viewSettings?.translationFontStyle,
+    viewSettings?.translationFontSize,
+    viewSettings?.translationColor,
+  ]);
 
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
@@ -988,6 +1048,11 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
             margin-block-end: 0;
           }
 
+          .paragraph-translation-target {
+            display: block;
+            ${translationCss}
+          }
+
           ::highlight(${TTS_HIGHLIGHT_NAME}) {
             ${ttsHighlightCss}
           }
@@ -996,6 +1061,7 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
         `}</style>
         {activeParagraph ? (
           <div
+            ref={frameRef}
             className={clsx(
               // No surface of its own: the paragraph sits on the page color, so
               // there is nothing left to round off (#5275).

@@ -42,6 +42,8 @@ export type ReadingRulerColor = 'transparent' | 'yellow' | 'green' | 'blue' | 'r
 
 export interface ParagraphModeConfig {
   enabled: boolean;
+  /** Sentence-by-sentence translation of the focused paragraph. */
+  translationEnabled?: boolean;
 }
 
 export type ImageViewerGesture = 'tap' | 'longPress';

@@ -1,0 +1,165 @@
+import { afterEach, describe, expect, test, vi } from 'vitest';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
+
+import ParagraphOverlay from '@/app/reader/components/paragraph/ParagraphOverlay';
+import { eventDispatcher } from '@/utils/event';
+import { ViewSettings } from '@/types/book';
+import {
+  DEFAULT_ANNOTATOR_CONFIG,
+  DEFAULT_BOOK_FONT,
+  DEFAULT_BOOK_LANGUAGE,
+  DEFAULT_BOOK_LAYOUT,
+  DEFAULT_BOOK_STYLE,
+  DEFAULT_SCREEN_CONFIG,
+  DEFAULT_TTS_CONFIG,
+  DEFAULT_TRANSLATOR_CONFIG,
+  DEFAULT_VIEW_CONFIG,
+} from '@/services/constants';
+import '@/styles/globals.css';
+
+vi.mock('@/hooks/useTranslator', () => ({
+  useTranslator: () => ({
+    translate: vi.fn(async (texts: string[]) => texts.map((text) => `ID:${text}`)),
+    translator: { concurrency: 2 },
+    translators: [],
+    loading: false,
+  }),
+}));
+
+vi.mock('@/context/EnvContext', () => ({
+  useEnv: () => ({ envConfig: {}, appService: { hasSafeAreaInset: false, isAndroidApp: false } }),
+}));
+
+vi.mock('@/store/settingsStore', () => ({
+  useSettingsStore: () => ({ settings: { globalReadSettings: {} } }),
+}));
+
+vi.mock('@/store/readerStore', () => ({
+  useReaderStore: () => ({
+    getViewSettings: () => ({}),
+    setViewSettings: vi.fn(),
+    getProgress: () => null,
+    getView: () => null,
+  }),
+}));
+
+vi.mock('@/store/bookDataStore', () => ({
+  useBookDataStore: (selector?: (state: unknown) => unknown) => {
+    const state = {
+      getBookData: () => ({ isFixedLayout: false }),
+      booksData: {
+        'browser-book': { book: { title: 'Book', author: 'Author' }, config: { booknotes: [] } },
+      },
+    };
+    return selector ? selector(state) : state;
+  },
+}));
+
+const viewSettings = {
+  ...DEFAULT_BOOK_FONT,
+  ...DEFAULT_BOOK_LAYOUT,
+  ...DEFAULT_BOOK_LANGUAGE,
+  ...DEFAULT_BOOK_STYLE,
+  ...DEFAULT_VIEW_CONFIG,
+  ...DEFAULT_TTS_CONFIG,
+  ...DEFAULT_TRANSLATOR_CONFIG,
+  ...DEFAULT_ANNOTATOR_CONFIG,
+  ...DEFAULT_SCREEN_CONFIG,
+  paragraphMode: { enabled: true, translationEnabled: true },
+  translationProvider: 'deepl',
+  translateTargetLang: 'ID',
+} as ViewSettings;
+
+// Twelve sentences so the interleaved content is far taller than the frame's
+// height cap at any viewport.
+const SENTENCE = 'She fed him sections of the Fetes Galantes before he was ten years old.';
+const LONG_PARAGRAPH = Array.from({ length: 12 }, () => SENTENCE).join(' ');
+
+const focus = async (text: string) => {
+  const source = document.createElement('p');
+  source.textContent = text;
+  document.body.appendChild(source);
+  const range = document.createRange();
+  range.selectNodeContents(source);
+  const { container } = render(
+    <ParagraphOverlay bookKey='browser-book' viewSettings={viewSettings} />,
+  );
+  await act(async () => {
+    await eventDispatcher.dispatch('paragraph-focus', {
+      bookKey: 'browser-book',
+      range,
+      presentation: { dir: 'ltr', writingMode: 'horizontal-tb', vertical: false, rtl: false },
+    });
+  });
+  const clone = container.querySelector('.paragraph-content') as HTMLElement;
+  expect(clone).not.toBeNull();
+  return { container, clone };
+};
+
+describe('paragraph overlay scrolling with sentence translations', () => {
+  afterEach(() => {
+    cleanup();
+    document.querySelectorAll('body > p').forEach((node) => node.remove());
+  });
+
+  test('every sentence gets a translation block, including the tail', async () => {
+    const { container } = await focus(LONG_PARAGRAPH);
+    await waitFor(() => {
+      expect(container.querySelectorAll('.paragraph-translation-target').length).toBe(12);
+    });
+  });
+
+  test('a wheel over scrollable paragraph content scrolls instead of page-turning', async () => {
+    const { container } = await focus(LONG_PARAGRAPH);
+    // Wait for the interleaved translations: they are what push the content
+    // past the frame's height cap.
+    await waitFor(() => {
+      expect(container.querySelectorAll('.paragraph-translation-target').length).toBe(12);
+    });
+    const frame = container.querySelector('.overflow-auto') as HTMLElement;
+    expect(frame).not.toBeNull();
+    // The interleaved content really does overflow the frame's height cap.
+    expect(frame.scrollHeight).toBeGreaterThan(frame.clientHeight);
+
+    const dispatchSpy = vi.spyOn(eventDispatcher, 'dispatch');
+
+    // Mid-scroll: the wheel belongs to the paragraph content.
+    frame.scrollTop = Math.floor((frame.scrollHeight - frame.clientHeight) / 2);
+    const midScrollTop = frame.scrollTop;
+    await act(async () => {
+      frame.dispatchEvent(
+        new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true }),
+      );
+    });
+    expect(dispatchSpy).not.toHaveBeenCalledWith('paragraph-next', expect.anything());
+
+    // At the very bottom: the same wheel turns to the next paragraph.
+    frame.scrollTop = frame.scrollHeight - frame.clientHeight;
+    await act(async () => {
+      frame.dispatchEvent(
+        new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true }),
+      );
+    });
+    expect(dispatchSpy).toHaveBeenCalledWith('paragraph-next', { bookKey: 'browser-book' });
+
+    // Scrolled back to the top: wheel-up turns to the previous paragraph, but
+    // wheel-down keeps scrolling down. The wait clears the page-turn throttle
+    // the bottom wheel armed.
+    frame.scrollTop = 0;
+    dispatchSpy.mockClear();
+    await act(async () => {
+      frame.dispatchEvent(
+        new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true }),
+      );
+    });
+    expect(dispatchSpy).not.toHaveBeenCalledWith('paragraph-prev', expect.anything());
+    await new Promise((resolve) => setTimeout(resolve, 160));
+    await act(async () => {
+      frame.dispatchEvent(
+        new WheelEvent('wheel', { deltaY: -120, bubbles: true, cancelable: true }),
+      );
+    });
+    expect(dispatchSpy).toHaveBeenCalledWith('paragraph-prev', { bookKey: 'browser-book' });
+    expect(midScrollTop).toBeGreaterThan(0);
+  });
+});
