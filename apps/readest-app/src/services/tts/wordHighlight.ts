@@ -19,7 +19,9 @@ const TICKS_PER_SECOND = 10_000_000;
 // (gloss-free) won't align with the walked text. Ruby follows the same rule the
 // TTS node filter applies, so whichever side of a ruby pair is muted there is
 // muted here: for a kana reading that is the base, otherwise the annotation.
-const isInertText = (node: Node): boolean => {
+// Exported for the paragraph-mode sentence splitter, which must skip the same
+// injected text when computing its baseline.
+export const isInertText = (node: Node): boolean => {
   if (isMutedRubyNode(node)) return true;
   let p: Node | null = node.parentNode;
   while (p) {

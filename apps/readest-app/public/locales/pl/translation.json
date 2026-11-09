@@ -2972,5 +2972,8 @@
   "Books uploaded": "Przesłane książki",
   "Reset Counts": "Resetuj liczniki",
   "Reset the counts and sync history on this device?": "Zresetować liczniki i historię synchronizacji na tym urządzeniu?",
-  "Folder not available": "Folder niedostępny"
+  "Folder not available": "Folder niedostępny",
+  "Translate Sentences": "Tłumacz zdania",
+  "Hide Sentence Translation": "Ukryj tłumaczenie zdań",
+  "Sentence Translation": "Tłumaczenie zdań"
 }

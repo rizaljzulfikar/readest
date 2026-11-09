@@ -2899,5 +2899,8 @@
   "Books uploaded": "Cărți încărcate",
   "Reset Counts": "Resetează contoarele",
   "Reset the counts and sync history on this device?": "Resetezi contoarele și istoricul sincronizării pe acest dispozitiv?",
-  "Folder not available": "Dosar indisponibil"
+  "Folder not available": "Dosar indisponibil",
+  "Translate Sentences": "Traduceți propozițiile",
+  "Hide Sentence Translation": "Ascunde traducerea propozițiilor",
+  "Sentence Translation": "Traducerea propozițiilor"
 }

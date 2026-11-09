@@ -167,4 +167,47 @@ describe('ParagraphBar', () => {
       expect(root.className).toContain('pointer-events-none');
     });
   });
+
+  it('toggles sentence translation from the display settings', () => {
+    const onToggleTranslation = vi.fn();
+    const { container, rerender } = renderBar('book-1', {
+      onToggleTranslation,
+      translationEnabled: false,
+    });
+
+    // The bar itself has no translate button; the toggle lives behind the gear.
+    expect(container.querySelector('button[aria-label="Translate Sentences"]')).toBeNull();
+
+    fireEvent.click(container.querySelector('button[aria-label="Settings"]')!);
+    const toggle = container.querySelector(
+      'input[aria-label="Sentence Translation"]',
+    ) as HTMLInputElement;
+    expect(toggle).not.toBeNull();
+    expect(toggle.checked).toBe(false);
+
+    fireEvent.click(toggle);
+    expect(onToggleTranslation).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <ParagraphBar
+        bookKey='book-1'
+        currentIndex={0}
+        totalParagraphs={10}
+        onPrev={vi.fn()}
+        onNext={vi.fn()}
+        onClose={vi.fn()}
+        onToggleTranslation={onToggleTranslation}
+        translationEnabled
+        viewSettings={{ writingMode: 'horizontal-tb', vertical: false, rtl: false } as never}
+        gridInsets={{ top: 0, right: 0, bottom: 0, left: 0 }}
+        fontScaleIndex={0}
+        onFontScaleIndexChange={vi.fn()}
+      />,
+    );
+    // The reopened panel reflects the active state.
+    const activeToggle = container.querySelector(
+      'input[aria-label="Sentence Translation"]',
+    ) as HTMLInputElement;
+    expect(activeToggle.checked).toBe(true);
+  });
 });

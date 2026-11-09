@@ -2899,5 +2899,8 @@
   "Books uploaded": "Libri caricati",
   "Reset Counts": "Azzera conteggi",
   "Reset the counts and sync history on this device?": "Azzerare i conteggi e la cronologia di sincronizzazione su questo dispositivo?",
-  "Folder not available": "Cartella non disponibile"
+  "Folder not available": "Cartella non disponibile",
+  "Translate Sentences": "Traduci frasi",
+  "Hide Sentence Translation": "Nascondi traduzione delle frasi",
+  "Sentence Translation": "Traduzione delle frasi"
 }

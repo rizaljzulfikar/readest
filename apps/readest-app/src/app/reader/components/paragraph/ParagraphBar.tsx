@@ -44,6 +44,9 @@ interface ParagraphBarProps {
   ttsActive?: boolean;
   /** Toggle read-along: start TTS from the focused paragraph, or stop it. */
   onToggleTtsAudio?: () => void;
+  /** Sentence-by-sentence translation state and toggle for the overlay. */
+  translationEnabled?: boolean;
+  onToggleTranslation?: () => void;
   /** Index into PARAGRAPH_FONT_SCALE_OPTIONS for the display settings (#5246). */
   fontScaleIndex: number;
   onFontScaleIndexChange: (index: number) => void;
@@ -65,6 +68,8 @@ const ParagraphBar: React.FC<ParagraphBarProps> = ({
   onClose,
   ttsActive = false,
   onToggleTtsAudio,
+  translationEnabled = false,
+  onToggleTranslation,
   fontScaleIndex,
   onFontScaleIndexChange,
   viewSettings,
@@ -245,43 +250,59 @@ const ParagraphBar: React.FC<ParagraphBarProps> = ({
     >
       {/* Display settings (#5246) — same chrome as the bar card, floating just
           above it. Font size here is a scale on the reader's own font size, so
-          the paragraph can be larger than the book text on big screens. */}
+          the paragraph can be larger than the book text on big screens. The
+          sentence translation override lives here too, off the main bar. */}
       {showSettings && (
         <div
           className={clsx(
             'absolute bottom-full left-1/2 mb-2 -translate-x-1/2',
             'not-eink:bg-base-300 eink-bordered rounded-2xl shadow-lg',
-            'text-base-content flex items-center gap-1 whitespace-nowrap px-4 py-2 text-sm',
+            'text-base-content flex flex-col items-stretch gap-1 whitespace-nowrap px-4 py-2 text-sm',
           )}
         >
-          <span className='text-base-content/60 me-1 font-medium'>{_('Font Size')}</span>
-          <button
-            type='button'
-            onClick={() => onFontScaleIndexChange(fontScaleIndex - 1)}
-            disabled={fontScaleIndex <= 0}
-            className={clsx(BAR_BUTTON, fontScaleIndex <= 0 && 'pointer-events-none opacity-50')}
-            title={_('Decrease font size')}
-            aria-label={_('Decrease font size')}
-          >
-            <IoRemove size={iconSize20} />
-          </button>
-          <span className='min-w-12 text-center font-medium tabular-nums'>
-            {Math.round(fontScale * 100)}%
-          </span>
-          <button
-            type='button'
-            onClick={() => onFontScaleIndexChange(fontScaleIndex + 1)}
-            disabled={fontScaleIndex >= PARAGRAPH_FONT_SCALE_OPTIONS.length - 1}
-            className={clsx(
-              BAR_BUTTON,
-              fontScaleIndex >= PARAGRAPH_FONT_SCALE_OPTIONS.length - 1 &&
-                'pointer-events-none opacity-50',
-            )}
-            title={_('Increase font size')}
-            aria-label={_('Increase font size')}
-          >
-            <IoAdd size={iconSize20} />
-          </button>
+          <div className='flex items-center gap-1'>
+            <span className='text-base-content/60 me-1 font-medium'>{_('Font Size')}</span>
+            <button
+              type='button'
+              onClick={() => onFontScaleIndexChange(fontScaleIndex - 1)}
+              disabled={fontScaleIndex <= 0}
+              className={clsx(BAR_BUTTON, fontScaleIndex <= 0 && 'pointer-events-none opacity-50')}
+              title={_('Decrease font size')}
+              aria-label={_('Decrease font size')}
+            >
+              <IoRemove size={iconSize20} />
+            </button>
+            <span className='min-w-12 text-center font-medium tabular-nums'>
+              {Math.round(fontScale * 100)}%
+            </span>
+            <button
+              type='button'
+              onClick={() => onFontScaleIndexChange(fontScaleIndex + 1)}
+              disabled={fontScaleIndex >= PARAGRAPH_FONT_SCALE_OPTIONS.length - 1}
+              className={clsx(
+                BAR_BUTTON,
+                fontScaleIndex >= PARAGRAPH_FONT_SCALE_OPTIONS.length - 1 &&
+                  'pointer-events-none opacity-50',
+              )}
+              title={_('Increase font size')}
+              aria-label={_('Increase font size')}
+            >
+              <IoAdd size={iconSize20} />
+            </button>
+          </div>
+          {onToggleTranslation && (
+            <div className='flex items-center justify-between gap-6'>
+              <span className='text-base-content/60 font-medium'>{_('Sentence Translation')}</span>
+              <input
+                type='checkbox'
+                className='toggle toggle-sm'
+                checked={translationEnabled}
+                onChange={onToggleTranslation}
+                title={_('Sentence Translation')}
+                aria-label={_('Sentence Translation')}
+              />
+            </div>
+          )}
         </div>
       )}
 

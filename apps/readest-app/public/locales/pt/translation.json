@@ -2899,5 +2899,8 @@
   "Books uploaded": "Livros carregados",
   "Reset Counts": "Repor contagens",
   "Reset the counts and sync history on this device?": "Repor as contagens e o histórico de sincronização neste dispositivo?",
-  "Folder not available": "Pasta indisponível"
+  "Folder not available": "Pasta indisponível",
+  "Translate Sentences": "Traduzir frases",
+  "Hide Sentence Translation": "Ocultar tradução de frases",
+  "Sentence Translation": "Tradução de frases"
 }

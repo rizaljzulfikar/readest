@@ -2899,5 +2899,8 @@
   "Books uploaded": "Livres envoyés sur le serveur",
   "Reset Counts": "Réinitialiser les compteurs",
   "Reset the counts and sync history on this device?": "Réinitialiser les compteurs et l'historique de synchronisation sur cet appareil ?",
-  "Folder not available": "Dossier indisponible"
+  "Folder not available": "Dossier indisponible",
+  "Translate Sentences": "Traduire les phrases",
+  "Hide Sentence Translation": "Masquer la traduction des phrases",
+  "Sentence Translation": "Traduction des phrases"
 }

@@ -324,7 +324,7 @@ export function useTextTranslation(
     });
 
     translatedElements.current = [];
-    if (viewSettings?.translationEnabled && view) {
+    if (enabled.current && view) {
       recreateTranslationObserver();
     }
   };

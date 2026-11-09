@@ -2972,5 +2972,8 @@
   "Books uploaded": "Naložene knjige",
   "Reset Counts": "Ponastavi števce",
   "Reset the counts and sync history on this device?": "Želite ponastaviti števce in zgodovino sinhronizacije v tej napravi?",
-  "Folder not available": "Mapa ni na voljo"
+  "Folder not available": "Mapa ni na voljo",
+  "Translate Sentences": "Prevedi stavke",
+  "Hide Sentence Translation": "Skrij prevod stavkov",
+  "Sentence Translation": "Prevod stavkov"
 }

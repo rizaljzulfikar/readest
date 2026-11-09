@@ -152,31 +152,48 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
       await checkDailyUsage(user.id, token, uncachedChars);
     }
 
-    const translations = await Promise.all(
-      text.map(async (singleText, i) => {
-        if (!singleText.trim()) {
-          return { text: '', daily_usage: 0 };
-        }
-        const cachedTranslation = cached[i];
-        if (cachedTranslation) {
-          return {
-            text: cachedTranslation,
-            daily_usage: 0,
-            detected_source_language: sourceLang,
-          };
-        }
+    const uncachedIndices: number[] = [];
+    text.forEach((singleText, i) => {
+      if (singleText.trim() && !cached[i]) uncachedIndices.push(i);
+    });
 
-        return await callDeepLAPI(
-          singleText,
-          sourceLang,
-          targetLang,
-          deeplApiUrl,
-          deeplAuthKey,
-          env['TRANSLATIONS_KV'],
-          useCache,
-        );
-      }),
+    // One upstream call for all uncached texts: DeepL's v2 API takes an array,
+    // and fanning out one request per sentence burst past its rate limit (429)
+    // for every multi-sentence paragraph.
+    const upstream = await callDeepLAPIBatch(
+      uncachedIndices.map((i) => text[i]!),
+      sourceLang,
+      targetLang,
+      deeplApiUrl,
+      deeplAuthKey,
+      env['TRANSLATIONS_KV'],
+      useCache,
     );
+    const upstreamByIndex = new Map<number, (typeof upstream)[number]>();
+    uncachedIndices.forEach((originalIndex, batchIndex) => {
+      const result = upstream[batchIndex];
+      if (result) upstreamByIndex.set(originalIndex, result);
+    });
+
+    const translations = text.map((singleText, i) => {
+      if (!singleText.trim()) {
+        return { text: '', daily_usage: 0 };
+      }
+      const cachedTranslation = cached[i];
+      if (cachedTranslation) {
+        return {
+          text: cachedTranslation,
+          daily_usage: 0,
+          detected_source_language: sourceLang,
+        };
+      }
+      const result = upstreamByIndex.get(i);
+      return {
+        text: result?.text ?? '',
+        daily_usage: 0,
+        detected_source_language: result?.detected_source_language ?? '',
+      };
+    });
     const originalCharsCount = text.reduce((a, b) => a + b.length, 0);
     const translatedCharsCount = translations.reduce((a, b) => a + (b?.text.length || 0), 0);
     const newDailyUsage = await updateDailyUsage(
@@ -200,7 +217,91 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   }
 };
 
-async function callDeepLAPI(
+async function callDeepLAPIBatch(
+  texts: string[],
+  sourceLang: string,
+  targetLang: string,
+  apiUrl: string,
+  authKey: string,
+  translationsKV: KVNamespace | undefined,
+  useCache: boolean,
+): Promise<{ text: string; daily_usage: number; detected_source_language: string }[]> {
+  const isV2Api = apiUrl.endsWith('/v2/translate');
+
+  // The legacy API takes a single text per request; run the texts one after
+  // another so a large batch cannot burst the upstream rate limit.
+  if (!isV2Api) {
+    const results: { text: string; daily_usage: number; detected_source_language: string }[] = [];
+    for (const singleText of texts) {
+      results.push(
+        await callDeepLAPISingle(
+          singleText,
+          sourceLang,
+          targetLang,
+          apiUrl,
+          authKey,
+          translationsKV,
+          useCache,
+        ),
+      );
+    }
+    return results;
+  }
+
+  const inputs = texts.map((singleText) => singleText.replaceAll('\n', '').trim());
+  const requestBody: {
+    text: string[];
+    target_lang: string;
+    source_lang?: string;
+  } = {
+    text: inputs,
+    source_lang: sourceLang,
+    target_lang: targetLang,
+  };
+  if (requestBody.source_lang?.toUpperCase() === 'AUTO') {
+    delete requestBody.source_lang;
+  }
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `DeepL-Auth-Key ${authKey}`,
+      'x-fingerprint': process.env['DEEPL_X_FINGERPRINT'] || '',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`DeepL API error (${response.status}): ${errorText}`);
+  }
+
+  const data = (await response.json()) as {
+    translations?: { text: string; detected_source_language?: string }[];
+  };
+  const upstream = data.translations ?? [];
+
+  // DeepL answers one translation per input text, in order.
+  return inputs.map((_, i) => {
+    const translatedText = upstream[i]?.text ?? '';
+    if (useCache && translationsKV && translatedText) {
+      try {
+        const cacheKey = generateCacheKey(texts[i]!, sourceLang, targetLang);
+        void translationsKV.put(cacheKey, translatedText, { expirationTtl: 86400 * 90 });
+      } catch (cacheError) {
+        console.error('Cache storage error:', cacheError);
+      }
+    }
+    return {
+      text: translatedText,
+      daily_usage: 0,
+      detected_source_language: upstream[i]?.detected_source_language || '',
+    };
+  });
+}
+
+async function callDeepLAPISingle(
   text: string,
   sourceLang: string,
   targetLang: string,

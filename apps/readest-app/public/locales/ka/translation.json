@@ -2826,5 +2826,8 @@
   "Books uploaded": "ატვირთული წიგნები",
   "Reset Counts": "მრიცხველების გადატვირთვა",
   "Reset the counts and sync history on this device?": "გადაიტვირთოს მრიცხველები და სინქრონიზაციის ისტორია ამ მოწყობილობაზე?",
-  "Folder not available": "საქაღალდე მიუწვდომელია"
+  "Folder not available": "საქაღალდე მიუწვდომელია",
+  "Translate Sentences": "წინადადებების თარგმნა",
+  "Hide Sentence Translation": "წინადადებების თარგმანის დამალვა",
+  "Sentence Translation": "წინადადებების თარგმანი"
 }

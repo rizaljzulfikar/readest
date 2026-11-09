@@ -2826,5 +2826,8 @@
   "Books uploaded": "Feltöltött könyvek",
   "Reset Counts": "Számlálók nullázása",
   "Reset the counts and sync history on this device?": "Nullázza a számlálókat és a szinkronizálási előzményeket ezen az eszközön?",
-  "Folder not available": "A mappa nem érhető el"
+  "Folder not available": "A mappa nem érhető el",
+  "Translate Sentences": "Mondatok fordítása",
+  "Hide Sentence Translation": "Mondatfordítás elrejtése",
+  "Sentence Translation": "Mondatfordítás"
 }

@@ -3,9 +3,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FoliateView } from '@/types/view';
 import { Insets } from '@/types/misc';
+import { useEnv } from '@/context/EnvContext';
 import { useReaderStore } from '@/store/readerStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { eventDispatcher } from '@/utils/event';
+import { saveViewSettings } from '@/helpers/settings';
+import { DEFAULT_PARAGRAPH_MODE_CONFIG } from '@/services/constants';
 import {
   loadParagraphFontScaleIndex,
   PARAGRAPH_FONT_SCALE_OPTIONS,
@@ -23,7 +26,8 @@ interface ParagraphControlProps {
 
 const ParagraphControl: React.FC<ParagraphControlProps> = ({ bookKey, viewRef, gridInsets }) => {
   const _ = useTranslation();
-  const { getViewSettings } = useReaderStore();
+  const { envConfig } = useEnv();
+  const { getViewSettings, setViewSettings } = useReaderStore();
   const viewSettings = getViewSettings(bookKey);
 
   const {
@@ -37,6 +41,19 @@ const ParagraphControl: React.FC<ParagraphControlProps> = ({ bookKey, viewRef, g
     toggleTtsAudio,
     reengageTtsFollow,
   } = useParagraphMode({ bookKey, viewRef });
+
+  // Sentence-by-sentence display toggle, persisted per book like the mode
+  // itself. It only controls how the paragraph's translation is MAPPED in the
+  // overlay (sentence by sentence vs one block); the translation request
+  // itself always follows the main translation toggle.
+  const toggleSentenceTranslation = useCallback(() => {
+    const settings = getViewSettings(bookKey);
+    if (!settings) return;
+    const config = settings.paragraphMode ?? DEFAULT_PARAGRAPH_MODE_CONFIG;
+    const newConfig = { ...config, translationEnabled: !config.translationEnabled };
+    setViewSettings(bookKey, { ...settings, paragraphMode: newConfig });
+    saveViewSettings(envConfig, bookKey, 'paragraphMode', newConfig, true, false);
+  }, [bookKey, getViewSettings, setViewSettings, envConfig]);
 
   // Device-level display scale for the paragraph text (#5246), persisted like
   // the RSVP overlay's display settings.
@@ -88,6 +105,8 @@ const ParagraphControl: React.FC<ParagraphControlProps> = ({ bookKey, viewRef, g
         onClose={toggleParagraphMode}
         ttsActive={ttsActive}
         onToggleTtsAudio={toggleTtsAudio}
+        translationEnabled={viewSettings?.paragraphMode?.translationEnabled ?? false}
+        onToggleTranslation={toggleSentenceTranslation}
         fontScaleIndex={fontScaleIndex}
         onFontScaleIndexChange={handleFontScaleIndexChange}
         viewSettings={viewSettings ?? undefined}

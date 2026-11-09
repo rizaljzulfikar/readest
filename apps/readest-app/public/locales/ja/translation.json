@@ -2753,5 +2753,8 @@
   "Books uploaded": "アップロードした本",
   "Reset Counts": "カウントをリセット",
   "Reset the counts and sync history on this device?": "このデバイスのカウントと同期履歴をリセットしますか？",
-  "Folder not available": "フォルダーを利用できません"
+  "Folder not available": "フォルダーを利用できません",
+  "Translate Sentences": "文を翻訳",
+  "Hide Sentence Translation": "文の翻訳を隠す",
+  "Sentence Translation": "文の翻訳"
 }
