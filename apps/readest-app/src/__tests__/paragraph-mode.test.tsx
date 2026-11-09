@@ -72,17 +72,6 @@ vi.mock('@/helpers/settings', () => ({
   saveViewSettings: vi.fn(),
 }));
 
-// The overlay mounts the sentence-translation hook, which needs an auth-backed
-// translator; the tests here don't exercise translation, so a stub suffices.
-vi.mock('@/hooks/useTranslator', () => ({
-  useTranslator: () => ({
-    translate: vi.fn(async (texts: string[]) => texts),
-    translator: { concurrency: 2 },
-    translators: [],
-    loading: false,
-  }),
-}));
-
 vi.mock('@/store/readerStore', () => ({
   useReaderStore: () => ({
     getViewSettings: mockGetViewSettings,

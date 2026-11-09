@@ -180,7 +180,6 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
   const booknotes = useBookDataStore(
     (state) => state.booksData[bookKey.split('-')[0]!]?.config?.booknotes,
   );
-  const bookMeta = useBookDataStore((state) => state.booksData[bookKey.split('-')[0]!]?.book);
   const { settings } = useSettingsStore();
   const [paragraphs, setParagraphs] = useState<ParagraphContent[]>([]);
   const [isVisible, setIsVisible] = useState(false);
@@ -721,18 +720,18 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
     return clear;
   }, [paragraphs, booknotes, bookKey, getCloneRoot, getView, settings]);
 
-  // Sentence-by-sentence translation of the focused paragraph. Translations are
-  // inserted into the clone after each sentence; the clone baseline (and with
-  // it selection mapping, highlights and TTS ranges) is untouched because the
-  // insertions are cfi-inert.
+  // Sentence-by-sentence display mapping of the focused paragraph's
+  // translation. The paragraph is translated whole by the book page's
+  // translation hook (one request, main toggle); this only redistributes the
+  // translated text per sentence in the clone. The insertions are cfi-inert,
+  // so the clone baseline (selection mapping, highlights, TTS ranges) is
+  // untouched.
   const sentenceTranslationEnabled = viewSettings?.paragraphMode?.translationEnabled ?? false;
   useParagraphSentenceTranslation({
     getCloneRoot,
     paragraphKey: activeParagraph?.id ?? -1,
     enabled: sentenceTranslationEnabled,
     viewSettings,
-    bookTitle: bookMeta?.title,
-    bookAuthor: bookMeta?.author,
   });
 
   // CSS for the inserted sentence translations, following the user's global

@@ -5,19 +5,9 @@ import ParagraphOverlay from '@/app/reader/components/paragraph/ParagraphOverlay
 import { eventDispatcher } from '@/utils/event';
 import { rangeTextExcludingInert } from '@/services/tts/wordHighlight';
 
-const mockTranslate = vi.fn(async (texts: string[]) => texts.map((text) => `ID:${text}`));
-
-vi.mock('@/hooks/useTranslator', () => ({
-  useTranslator: () => ({
-    translate: mockTranslate,
-    translator: { concurrency: 2 },
-    translators: [],
-    loading: false,
-  }),
-}));
-
 const currentViewSettings: Record<string, unknown> = {
   paragraphMode: { enabled: true, translationEnabled: true },
+  translationEnabled: true,
   translationProvider: 'deepl',
   translateTargetLang: 'ID',
   translationColor: '',
@@ -61,6 +51,11 @@ const waitFor = <T,>(callback: () => T | Promise<T>) =>
 const createDoc = (body: string): Document =>
   new DOMParser().parseFromString(`<html><body>${body}</body></html>`, 'text/html');
 
+// A paragraph as the book page's translation hook leaves it: source text plus
+// one appended translation wrapper carrying the whole-paragraph translation.
+const paragraphWithTranslation = (source: string, translated: string) =>
+  `<p>${source}<font class="translation-target translation-target-block" translation-element-mark="1" lang="ID">${translated}</font></p>`;
+
 const focusParagraph = async (bookKey: string, body: string) => {
   const doc = createDoc(body);
   const paragraph = doc.querySelector('p')!;
@@ -81,17 +76,25 @@ const focusParagraph = async (bookKey: string, body: string) => {
   return { doc, range };
 };
 
+const renderOverlay = () =>
+  render(<ParagraphOverlay bookKey='overlay-book' viewSettings={currentViewSettings as never} />);
+
 describe('paragraph sentence translation', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    currentViewSettings['paragraphMode'] = { enabled: true, translationEnabled: true };
   });
 
-  it('inserts one translation block after every sentence', async () => {
-    const { container } = render(
-      <ParagraphOverlay bookKey='overlay-book' viewSettings={currentViewSettings as never} />,
+  it('redistributes the translated paragraph sentence by sentence', async () => {
+    const { container } = renderOverlay();
+    await focusParagraph(
+      'overlay-book',
+      paragraphWithTranslation(
+        'Hello world. How are you? Nice day.',
+        'Halo dunia. Apa kabar? Hari yang bagus.',
+      ),
     );
-    await focusParagraph('overlay-book', '<p>Hello world. How are you? Nice day.</p>');
 
     const targets = await waitFor(() => {
       const nodes = container.querySelectorAll<HTMLElement>('.paragraph-translation-target');
@@ -100,13 +103,10 @@ describe('paragraph sentence translation', () => {
     });
 
     expect(targets.map((node) => node.textContent)).toEqual([
-      'ID:Hello world.',
-      'ID:How are you?',
-      'ID:Nice day.',
+      'Halo dunia.',
+      'Apa kabar?',
+      'Hari yang bagus.',
     ]);
-    // Translated sentences arrive as one batched call.
-    expect(mockTranslate).toHaveBeenCalledTimes(1);
-    expect(mockTranslate.mock.calls[0]![0]).toEqual(['Hello world.', 'How are you?', 'Nice day.']);
 
     // Injection conventions: not book text for offset computations, target
     // language marked for bidi and styling.
@@ -114,15 +114,50 @@ describe('paragraph sentence translation', () => {
       expect(node.hasAttribute('cfi-inert')).toBe(true);
       expect(node.getAttribute('lang')).toBe('ID');
     }
+
+    // The whole-paragraph wrapper is hidden while its text is redistributed,
+    // and comes back when the mapping is undone.
+    const wrapper = container.querySelector('.translation-target-block') as HTMLElement;
+    expect(wrapper.classList.contains('hidden')).toBe(true);
   });
 
-  it('keeps translations out of the inert-skipping baseline', async () => {
-    const { container } = render(
-      <ParagraphOverlay bookKey='overlay-book' viewSettings={currentViewSettings as never} />,
+  it('renders interleaved source and translation text in order', async () => {
+    const { container } = renderOverlay();
+    await focusParagraph(
+      'overlay-book',
+      paragraphWithTranslation(
+        'Hello world. How are you? Nice day.',
+        'Halo dunia. Apa kabar? Hari yang bagus.',
+      ),
     );
+    await waitFor(() => {
+      expect(container.querySelectorAll('.paragraph-translation-target').length).toBe(3);
+    });
+
+    const clone = container.querySelector('.paragraph-content')!;
+    const texts = Array.from(clone.childNodes)
+      .filter((node) => node.textContent?.trim())
+      // The whole-paragraph wrapper is hidden while its text is redistributed.
+      .filter((node) => !(node instanceof HTMLElement && node.classList.contains('hidden')))
+      .map((node) => node.textContent!.trim());
+    expect(texts).toEqual([
+      'Hello world.',
+      'Halo dunia.',
+      'How are you?',
+      'Apa kabar?',
+      'Nice day.',
+      'Hari yang bagus.',
+    ]);
+  });
+
+  it('keeps the inserted blocks out of the inert-skipping baseline', async () => {
+    const { container } = renderOverlay();
     const { range } = await focusParagraph(
       'overlay-book',
-      '<p>Hello world. How are you? Nice day.</p>',
+      paragraphWithTranslation(
+        'Hello world. How are you? Nice day.',
+        'Halo dunia. Apa kabar? Hari yang bagus.',
+      ),
     );
     await waitFor(() => {
       expect(container.querySelectorAll('.paragraph-translation-target').length).toBe(3);
@@ -131,38 +166,41 @@ describe('paragraph sentence translation', () => {
     const clone = container.querySelector('.paragraph-content')!;
     const base = (clone.ownerDocument as Document).createRange();
     base.selectNodeContents(clone);
+    // Baseline = everything cloned except the (inert) per-sentence blocks —
+    // the source text plus the wrapper's text, exactly what the book range
+    // stringifies to.
     expect(rangeTextExcludingInert(base)).toBe(range.toString());
   });
 
-  it('renders interleaved source and translation text in order', async () => {
-    const { container } = render(
-      <ParagraphOverlay bookKey='overlay-book' viewSettings={currentViewSettings as never} />,
+  it('falls back to the block translation when sentence counts differ', async () => {
+    const { container } = renderOverlay();
+    await focusParagraph(
+      'overlay-book',
+      paragraphWithTranslation(
+        'Hello world. How are you? Nice day.',
+        'Halo dunia semua, apa kabar kalian?',
+      ),
     );
-    await focusParagraph('overlay-book', '<p>Hello world. How are you? Nice day.</p>');
-    await waitFor(() => {
-      expect(container.querySelectorAll('.paragraph-translation-target').length).toBe(3);
-    });
 
-    const clone = container.querySelector('.paragraph-content')!;
-    const nodes = Array.from(clone.childNodes).filter((node) => node.textContent?.trim());
-    const texts = nodes.map((node) =>
-      node.nodeType === Node.TEXT_NODE ? node.textContent!.trim() : node.textContent!.trim(),
-    );
-    expect(texts).toEqual([
-      'Hello world.',
-      'ID:Hello world.',
-      'How are you?',
-      'ID:How are you?',
-      'Nice day.',
-      'ID:Nice day.',
-    ]);
+    // Give the mapper a chance to run; the mismatch must leave the wrapper
+    // exactly as the book translation produced it.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(container.querySelectorAll('.paragraph-translation-target').length).toBe(0);
+    const wrapper = container.querySelector('.translation-target-block') as HTMLElement;
+    expect(wrapper).not.toBeNull();
+    expect(wrapper.classList.contains('hidden')).toBe(false);
+    expect(wrapper.textContent).toBe('Halo dunia semua, apa kabar kalian?');
   });
 
-  it('removes inserted translations when the toggle turns off', async () => {
-    const { container, rerender } = render(
-      <ParagraphOverlay bookKey='overlay-book' viewSettings={currentViewSettings as never} />,
+  it('restores the block translation when the toggle turns off', async () => {
+    const { container, rerender } = renderOverlay();
+    await focusParagraph(
+      'overlay-book',
+      paragraphWithTranslation(
+        'Hello world. How are you? Nice day.',
+        'Halo dunia. Apa kabar? Hari yang bagus.',
+      ),
     );
-    await focusParagraph('overlay-book', '<p>Hello world. How are you? Nice day.</p>');
     await waitFor(() => {
       expect(container.querySelectorAll('.paragraph-translation-target').length).toBe(3);
     });
@@ -174,54 +212,45 @@ describe('paragraph sentence translation', () => {
     await waitFor(() => {
       expect(container.querySelectorAll('.paragraph-translation-target').length).toBe(0);
     });
-    currentViewSettings['paragraphMode'] = { enabled: true, translationEnabled: true };
+    const wrapper = container.querySelector('.translation-target-block') as HTMLElement;
+    expect(wrapper.classList.contains('hidden')).toBe(false);
   });
 
   it('does nothing when the toggle is off from the start', async () => {
     currentViewSettings['paragraphMode'] = { enabled: true, translationEnabled: false };
     try {
-      const { container } = render(
-        <ParagraphOverlay bookKey='overlay-book' viewSettings={currentViewSettings as never} />,
+      const { container } = renderOverlay();
+      await focusParagraph(
+        'overlay-book',
+        paragraphWithTranslation(
+          'Hello world. How are you? Nice day.',
+          'Halo dunia. Apa kabar? Hari yang bagus.',
+        ),
       );
-      await focusParagraph('overlay-book', '<p>Hello world. How are you? Nice day.</p>');
       await waitFor(() => {
         expect(container.querySelector('.paragraph-content')).not.toBeNull();
       });
       await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(mockTranslate).not.toHaveBeenCalled();
       expect(container.querySelectorAll('.paragraph-translation-target').length).toBe(0);
+      const wrapper = container.querySelector('.translation-target-block') as HTMLElement;
+      expect(wrapper.classList.contains('hidden')).toBe(false);
     } finally {
       currentViewSettings['paragraphMode'] = { enabled: true, translationEnabled: true };
     }
-  });
-
-  it('settles briefly before sending the paragraph batch', async () => {
-    const { container } = render(
-      <ParagraphOverlay bookKey='overlay-book' viewSettings={currentViewSettings as never} />,
-    );
-    await focusParagraph('overlay-book', '<p>Hello world. How are you? Nice day.</p>');
-    await waitFor(() => {
-      expect(container.querySelector('.paragraph-content')).not.toBeNull();
-    });
-    // Flipping through paragraphs must not fire a request per paragraph.
-    await new Promise((resolve) => setTimeout(resolve, 40));
-    expect(mockTranslate).not.toHaveBeenCalled();
-    await waitFor(() => {
-      expect(mockTranslate).toHaveBeenCalledTimes(1);
-    });
   });
 
   // User-reported regression: paragraphs whose final sentence ends in a quoted
   // word or an ellipsis lost their tail translation. The tail span always
   // exists (the splitter pushes the remaining text), so every sentence must
   // come back translated.
-  it('translates the tail sentence of paragraphs ending in quotes or an ellipsis', async () => {
-    const { container } = render(
-      <ParagraphOverlay bookKey='overlay-book' viewSettings={currentViewSettings as never} />,
-    );
+  it('maps the tail sentence of paragraphs ending in quotes or an ellipsis', async () => {
+    const { container } = renderOverlay();
     await focusParagraph(
       'overlay-book',
-      '<p>She fed him sections of the "Fetes Galantes" before he was ten. This was fun for a while, but he eschewed a cigarette, and succumbed to a vulgar reaction. Though this incident horrified Beatrice, it also amused her and became part of what was later termed her "line."</p>',
+      paragraphWithTranslation(
+        'She fed him sections of the "Fetes Galantes" before he was ten. This was fun for a while, but he eschewed a cigarette, and succumbed to a vulgar reaction. Though this incident horrified Beatrice, it also amused her and became part of what was later termed her "line."',
+        'Dia memberinya makan bagian dari "Fetes Galantes" sebelum dia berumur sepuluh tahun. Ini menyenangkan untuk beberapa waktu, tetapi dia menolak rokok, dan menyerah pada reaksi yang vulgar. Meski kejadian ini membuat Beatrice ngeri, ia juga diam-diam tersenyum dan menjadi bagian dari apa yang kemudian disebut "garisnya."',
+      ),
     );
 
     const targets = await waitFor(() => {
@@ -230,20 +259,7 @@ describe('paragraph sentence translation', () => {
       return Array.from(nodes);
     });
     expect(targets[2]!.textContent).toBe(
-      'ID:Though this incident horrified Beatrice, it also amused her and became part of what was later termed her "line."',
+      'Meski kejadian ini membuat Beatrice ngeri, ia juga diam-diam tersenyum dan menjadi bagian dari apa yang kemudian disebut "garisnya."',
     );
-
-    await focusParagraph(
-      'overlay-book',
-      '<p>He told them of the apricot cordial. They rejoiced, for she was a brave raconteuse, but many were the keys turned in sideboard locks that night against the possible defection of little Bobby or Barbara...</p>',
-    );
-    await waitFor(() => {
-      const nodes = container.querySelectorAll<HTMLElement>('.paragraph-translation-target');
-      expect(nodes.length).toBe(2);
-    });
-    expect(mockTranslate).toHaveBeenLastCalledWith([
-      'He told them of the apricot cordial.',
-      'They rejoiced, for she was a brave raconteuse, but many were the keys turned in sideboard locks that night against the possible defection of little Bobby or Barbara...',
-    ]);
   });
 });

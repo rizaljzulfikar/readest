@@ -159,7 +159,10 @@ export const splitIntoSentences = (text: string): SentenceSpan[] => {
 const isInjectedNode = (node: Node): boolean => {
   if (isInertText(node)) return true;
   const parent = node.parentElement;
-  return !!parent && parent.closest('[translation-element-mark]') !== null;
+  // `translation-element-mark` marks book-page translations, but the sanitizer
+  // strips that attribute when the overlay clones the paragraph — the
+  // `translation-target` class is what survives there.
+  return !!parent && parent.closest('[translation-element-mark], .translation-target') !== null;
 };
 
 /** Filtered text-node walk shared by the baseline and bookmark builders. */

@@ -110,7 +110,7 @@ describe('ParagraphControl sentence translation override', () => {
     });
   });
 
-  it('turns the main translation toggle off when sentence translation is enabled', () => {
+  it('toggles sentence translation without touching the main translation toggle', () => {
     const { container } = renderControl();
     fireEvent.click(container.querySelector('button[aria-label="Settings"]')!);
     const toggle = container.querySelector(
@@ -121,25 +121,20 @@ describe('ParagraphControl sentence translation override', () => {
 
     fireEvent.click(toggle);
 
-    // The main toggle is really turned off, not just overridden in one place.
+    // The toggle only controls the overlay's sentence mapping — the main
+    // translation toggle and its persisted value are never written.
     expect(mockSetViewSettings).toHaveBeenCalledWith(
       'book-1',
       expect.objectContaining({
-        translationEnabled: false,
+        translationEnabled: true,
         paragraphMode: { enabled: true, translationEnabled: true },
       }),
     );
-    expect(saveViewSettings).toHaveBeenCalledWith(
-      expect.anything(),
-      'book-1',
-      'translationEnabled',
-      false,
-      true,
-      false,
-    );
+    const keys = saveViewSettings.mock.calls.map((call) => call[2]);
+    expect(keys).toEqual(['paragraphMode']);
   });
 
-  it('leaves the main toggle untouched when sentence translation is disabled', () => {
+  it('disabling sentence translation only writes the paragraph mode config', () => {
     currentViewSettings = {
       ...currentViewSettings,
       paragraphMode: { enabled: true, translationEnabled: true },

@@ -17,15 +17,6 @@ import {
 } from '@/services/constants';
 import '@/styles/globals.css';
 
-vi.mock('@/hooks/useTranslator', () => ({
-  useTranslator: () => ({
-    translate: vi.fn(async (texts: string[]) => texts.map((text) => `ID:${text}`)),
-    translator: { concurrency: 2 },
-    translators: [],
-    loading: false,
-  }),
-}));
-
 vi.mock('@/context/EnvContext', () => ({
   useEnv: () => ({ envConfig: {}, appService: { hasSafeAreaInset: false, isAndroidApp: false } }),
 }));
@@ -71,16 +62,26 @@ const viewSettings = {
 } as ViewSettings;
 
 // Twelve sentences so the interleaved content is far taller than the frame's
-// height cap at any viewport.
-const SENTENCE = 'She fed him sections of the Fetes Galantes before he was ten years old.';
-const LONG_PARAGRAPH = Array.from({ length: 12 }, () => SENTENCE).join(' ');
+// height cap at any viewport. The paragraph carries its whole-paragraph
+// translation the way the book page's translation hook appends it — the
+// overlay redistributes it sentence by sentence.
+const SOURCE = Array.from(
+  { length: 12 },
+  () => 'She fed him sections of the Fetes Galantes before he was ten years old.',
+).join(' ');
+const TRANSLATED = Array.from(
+  { length: 12 },
+  () => 'Dia memberinya makan bagian dari Fetes Galantes sebelum usia sepuluh tahun.',
+).join(' ');
+const LONG_PARAGRAPH = `<p>${SOURCE}<font class="translation-target translation-target-block" translation-element-mark="1" lang="ID">${TRANSLATED}</font></p>`;
 
-const focus = async (text: string) => {
-  const source = document.createElement('p');
-  source.textContent = text;
-  document.body.appendChild(source);
+const focus = async (body: string) => {
+  const holder = document.createElement('div');
+  holder.innerHTML = body;
+  document.body.appendChild(holder);
+  const paragraph = holder.querySelector('p')!;
   const range = document.createRange();
-  range.selectNodeContents(source);
+  range.selectNodeContents(paragraph);
   const { container } = render(
     <ParagraphOverlay bookKey='browser-book' viewSettings={viewSettings} />,
   );
@@ -91,22 +92,32 @@ const focus = async (text: string) => {
       presentation: { dir: 'ltr', writingMode: 'horizontal-tb', vertical: false, rtl: false },
     });
   });
-  const clone = container.querySelector('.paragraph-content') as HTMLElement;
+  const clone = container.querySelector('.paragraph-content');
   expect(clone).not.toBeNull();
-  return { container, clone };
+  return { container, clone: clone as HTMLElement };
 };
 
 describe('paragraph overlay scrolling with sentence translations', () => {
   afterEach(() => {
     cleanup();
-    document.querySelectorAll('body > p').forEach((node) => node.remove());
+    document.querySelectorAll('body > div').forEach((node) => {
+      if (node.querySelector('.translation-target')) node.remove();
+    });
   });
 
-  test('every sentence gets a translation block, including the tail', async () => {
+  test('redistributes every translated sentence, including the tail', async () => {
     const { container } = await focus(LONG_PARAGRAPH);
     await waitFor(() => {
       expect(container.querySelectorAll('.paragraph-translation-target').length).toBe(12);
     });
+    const targets = Array.from(
+      container.querySelectorAll<HTMLElement>('.paragraph-translation-target'),
+    );
+    expect(targets[0]!.textContent).toContain('Dia memberinya');
+    expect(targets[11]!.textContent).toContain('sebelum usia sepuluh tahun');
+    // The whole-paragraph wrapper is hidden while redistributed.
+    const wrapper = container.querySelector('.translation-target-block') as HTMLElement;
+    expect(wrapper.classList.contains('hidden')).toBe(true);
   });
 
   test('a wheel over scrollable paragraph content scrolls instead of page-turning', async () => {

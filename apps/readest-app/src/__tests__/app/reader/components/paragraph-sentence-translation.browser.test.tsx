@@ -19,15 +19,6 @@ import { getTextSubRange } from '@/services/tts/wordHighlight';
 import { buildSentenceTranslationPlan } from '@/app/reader/components/paragraph/paragraphSentences';
 import '@/styles/globals.css';
 
-vi.mock('@/hooks/useTranslator', () => ({
-  useTranslator: () => ({
-    translate: vi.fn(async (texts: string[]) => texts.map((text) => `ID:${text}`)),
-    translator: { concurrency: 2 },
-    translators: [],
-    loading: false,
-  }),
-}));
-
 vi.mock('@/context/EnvContext', () => ({
   useEnv: () => ({ envConfig: {}, appService: { hasSafeAreaInset: false, isAndroidApp: false } }),
 }));
@@ -75,13 +66,17 @@ const viewSettings = {
 describe('paragraph sentence translation in a real browser', () => {
   afterEach(() => {
     cleanup();
-    document.querySelectorAll('#paragraph-translation-source').forEach((node) => node.remove());
+    document.querySelectorAll('body > p').forEach((node) => node.remove());
   });
 
   test('interleaves each sentence with its translation on its own line', async () => {
     const source = document.createElement('p');
     source.id = 'paragraph-translation-source';
-    source.textContent = 'Hello world. How are you? Nice day.';
+    source.innerHTML =
+      'Hello world. How are you? Nice day.' +
+      '<font class="translation-target translation-target-block" translation-element-mark="1" lang="ID">' +
+      'Halo dunia. Apa kabar? Hari yang bagus.' +
+      '</font>';
     document.body.appendChild(source);
     const range = document.createRange();
     range.selectNodeContents(source);
@@ -98,7 +93,7 @@ describe('paragraph sentence translation in a real browser', () => {
       });
     });
 
-    const clone = await act(async () => {
+    const clone = await waitFor(() => {
       const node = container.querySelector('.paragraph-content');
       expect(node).not.toBeNull();
       return node as HTMLElement;
@@ -111,10 +106,11 @@ describe('paragraph sentence translation in a real browser', () => {
       expect(nodes.length).toBe(3);
       return Array.from(nodes);
     });
-    expect(Array.from(translations).map((node) => node.textContent)).toEqual([
-      'ID:Hello world.',
-      'ID:How are you?',
-      'ID:Nice day.',
+
+    expect(translations.map((node) => node.textContent)).toEqual([
+      'Halo dunia.',
+      'Apa kabar?',
+      'Hari yang bagus.',
     ]);
     for (const node of translations) {
       // Real layout: block-level, in the target language, marked inert.
@@ -125,14 +121,15 @@ describe('paragraph sentence translation in a real browser', () => {
 
     const childTexts = Array.from(clone.childNodes)
       .filter((node) => node.textContent?.trim())
+      .filter((node) => !(node instanceof HTMLElement && node.classList.contains('hidden')))
       .map((node) => node.textContent!.trim());
     expect(childTexts).toEqual([
       'Hello world.',
-      'ID:Hello world.',
+      'Halo dunia.',
       'How are you?',
-      'ID:How are you?',
+      'Apa kabar?',
       'Nice day.',
-      'ID:Nice day.',
+      'Hari yang bagus.',
     ]);
 
     // Geometry: every translation starts below its own source sentence, and

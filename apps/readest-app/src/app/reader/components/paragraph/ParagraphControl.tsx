@@ -42,22 +42,16 @@ const ParagraphControl: React.FC<ParagraphControlProps> = ({ bookKey, viewRef, g
     reengageTtsFollow,
   } = useParagraphMode({ bookKey, viewRef });
 
-  // Sentence-by-sentence translation toggle, persisted per book like the mode
-  // itself. Turning it on really turns the book page's paragraph translation
-  // off (the main toggle): sentence translation replaces it, so both can never
-  // run at once. Turning it back off leaves the main toggle as it is — the
-  // user re-enables it in Settings when they want paragraph translations.
+  // Sentence-by-sentence display toggle, persisted per book like the mode
+  // itself. It only controls how the paragraph's translation is MAPPED in the
+  // overlay (sentence by sentence vs one block); the translation request
+  // itself always follows the main translation toggle.
   const toggleSentenceTranslation = useCallback(() => {
     const settings = getViewSettings(bookKey);
     if (!settings) return;
     const config = settings.paragraphMode ?? DEFAULT_PARAGRAPH_MODE_CONFIG;
     const newConfig = { ...config, translationEnabled: !config.translationEnabled };
-    const nextSettings = { ...settings, paragraphMode: newConfig };
-    if (newConfig.translationEnabled) {
-      nextSettings.translationEnabled = false;
-      saveViewSettings(envConfig, bookKey, 'translationEnabled', false, true, false);
-    }
-    setViewSettings(bookKey, nextSettings);
+    setViewSettings(bookKey, { ...settings, paragraphMode: newConfig });
     saveViewSettings(envConfig, bookKey, 'paragraphMode', newConfig, true, false);
   }, [bookKey, getViewSettings, setViewSettings, envConfig]);
 

@@ -208,14 +208,7 @@ export function useTextTranslation(
   // readerProgressStore only.
   const progress = useBookProgress(bookKey);
 
-  // Paragraph Mode's sentence-by-sentence translation overrides the book
-  // page's paragraph translation: while it is active the main toggle is
-  // disabled here, so the overlay never shows both at once and no duplicate
-  // translations are fetched.
-  const sentenceTranslationActive =
-    !!viewSettings?.paragraphMode?.enabled && !!viewSettings?.paragraphMode?.translationEnabled;
-
-  const enabled = useRef(!!viewSettings?.translationEnabled && !sentenceTranslationActive);
+  const enabled = useRef(viewSettings?.translationEnabled);
   const [provider, setProvider] = useState(viewSettings?.translationProvider);
   const [targetLang, setTargetLang] = useState(viewSettings?.translateTargetLang);
   const [promptId, setPromptId] = useState(viewSettings?.translationPromptId);
@@ -537,8 +530,7 @@ export function useTextTranslation(
   useEffect(() => {
     if (!viewSettings) return;
 
-    const nextEnabled = !!viewSettings.translationEnabled && !sentenceTranslationActive;
-    const enabledChanged = enabled.current !== nextEnabled;
+    const enabledChanged = enabled.current !== viewSettings.translationEnabled;
     const providerChanged = provider !== viewSettings.translationProvider;
     const targetLangChanged = targetLang !== viewSettings.translateTargetLang;
     const promptChanged = promptId !== viewSettings.translationPromptId;
@@ -546,7 +538,7 @@ export function useTextTranslation(
       showTranslateSourceRef.current !== viewSettings.showTranslateSource;
 
     if (enabledChanged) {
-      enabled.current = nextEnabled;
+      enabled.current = viewSettings.translationEnabled;
     }
 
     if (providerChanged) {
@@ -566,7 +558,7 @@ export function useTextTranslation(
     }
 
     if (enabledChanged) {
-      toggleTranslationVisibility(nextEnabled);
+      toggleTranslationVisibility(viewSettings.translationEnabled);
       if (enabled.current) {
         observeTextNodes();
       }
